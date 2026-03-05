@@ -1,0 +1,10 @@
+Query: How to cook pasta?
+Top 5 Sections:
+  [0] Title: Install dependencies | Score: 1.15036344528198
+  [1] Title: Start backend | Score: 1.14666946232319
+  [2] Title: Build Stage | Score: 1.14508013427258
+  [3] Title: Production Stage | Score: 1.14067322015762
+  [4] Title: Initial Segment | Score: 1.1311192214489
+
+Top Score: 1.15036344528198
+RESULT: Passes to SLM

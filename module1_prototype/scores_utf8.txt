@@ -1,0 +1,7 @@
+﻿  [Query Embedder] Query embedded successfully
+--- SIMILARITY SCORES ---
+Doc: 275143cac6d9 | Score: 1.4535 | Section: Initial Segment
+Doc: c2dd237c-c69f-530b-8be3-3d250d9e075a | Score: 1.3442 | Section: 13. Deployment Architecture
+Doc: c2dd237c-c69f-530b-8be3-3d250d9e075a | Score: 1.3442 | Section: 13. Deployment Architecture
+Doc: d067f3a5ed5a | Score: 1.3442 | Section: 13. Deployment Architecture
+Doc: c2dd237c-c69f-530b-8be3-3d250d9e075a | Score: 1.3442 | Section: 13. Deployment Architecture

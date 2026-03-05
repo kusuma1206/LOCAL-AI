@@ -1,0 +1,11 @@
+SXIOWHNXKLANSKLCNAKLS 
+33333
+###@@@!!!
+////////???/?/
+///////???/?/,,,,,,,,,<<
+mihgddvbnnnnnmmk
+juvyuctrersxnklj98654edtcfgvbhjnkml
+/.[][';.//./
+,./[';/'/'/
+''/;.,mnbvcvbnjkl
+.,m,./
