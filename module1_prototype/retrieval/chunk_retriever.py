@@ -17,6 +17,7 @@ def retrieve_top_chunks(supabase, query_embedding: list, section_ids: list, top_
 
         if not response.data:
             print("  [Chunk Retriever Warning] No similar chunks found within selected sections.")
+            print("Retrieved chunks: 0")
             return []
 
         # Map results to expected keys
@@ -28,6 +29,7 @@ def retrieve_top_chunks(supabase, query_embedding: list, section_ids: list, top_
                 "similarity_score": row.get("similarity")
             })
 
+        print(f"Retrieved chunks: {len(top_chunks)}")
         print(f"  [Chunk Retriever] Chunks retrieved via RPC (Found {len(top_chunks)})")
         return top_chunks
 

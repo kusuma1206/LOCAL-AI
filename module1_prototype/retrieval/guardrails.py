@@ -51,7 +51,7 @@ class GuardrailEngine:
         Checks if the best retrieval match is relevant enough to proceed.
         Threshold calibrated based on observed distributions (1.15 bad, 1.44 good).
         """
-        THRESHOLD = 1.3  # Stricter threshold
+        THRESHOLD = 0.5  # Lowered threshold per user request
         return top_score >= THRESHOLD
 
     def validate_output(self, response: str) -> str:

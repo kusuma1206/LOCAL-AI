@@ -38,10 +38,35 @@ function App() {
       })
 
       const data = await response.json()
+      let displayContent = ""
+
+      if (typeof data.result === 'object' && data.result !== null) {
+        if (data.result.retrieved_context) {
+          displayContent = "### Retrieval Results (NOLLM)\n\n"
+          data.result.retrieved_context.forEach(item => {
+            if (item.type === 'global_summary') {
+              displayContent += `#### 📄 Document Overview\n${item.content}\n\n`
+            } else if (item.type === 'section') {
+              displayContent += `#### 📑 Section: ${item.title}\n${item.content}\n\n`
+            } else if (item.type === 'chunk') {
+              displayContent += `> ${item.content}\n\n`
+            }
+          })
+          if (data.result.primary_doc_id) {
+            const filenameStr = data.result.primary_filename ? ` - ${data.result.primary_filename}` : ""
+            displayContent += `---\n*Source Document: ID ${data.result.primary_doc_id}${filenameStr}*`
+          }
+        } else if (typeof data.result === 'object') {
+          // Fallback/id_only mode
+          displayContent = "### Document Information\n" + JSON.stringify(data.result, null, 2)
+        }
+      } else {
+        displayContent = data.result || "I'm sorry, I couldn't process that."
+      }
 
       const assistantMessage = {
         role: 'assistant',
-        content: data.result || "I'm sorry, I couldn't process that."
+        content: displayContent
       }
       setMessages(prev => [...prev, assistantMessage])
     } catch (error) {

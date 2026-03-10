@@ -103,13 +103,13 @@ def save_to_vector_store(processed_chunks, file_path=None):
         print(f"  [Vector Engine Failure] Critical error during storage operation: {e}")
         return False
 
-def insert_section(supabase, document_id, section_title, section_summary, section_embedding):
+def insert_section(supabase, doc_id, section_title, section_summary, section_embedding):
     """
     Inserts a section into the sections table for Hierarchical RAG.
     """
     try:
         data = {
-            "document_id": document_id,
+            "doc_id": doc_id,
             "section_title": section_title,
             "section_summary": section_summary,
             "section_embedding": section_embedding
@@ -146,23 +146,30 @@ def insert_chunk_with_section(supabase, section_id, content, embedding, chunk_ha
         print(f"  [Hierarchical Storage Failure] Could not insert chunk under section: {e}")
         return False
 
-def upsert_document(supabase, document_id, file_path, document_summary=None):
+def upsert_document(supabase, document_id, file_path, document_summary=None, document_embedding=None):
     """
-    Ensures a document record exists and optionally updates its summary.
+    Ensures a document record exists and returns its integer doc_id.
     """
     try:
         data = {
             "id": document_id,
             "filename": os.path.basename(file_path),
-            "document_summary": document_summary
+            "document_summary": document_summary,
+            "document_embedding": document_embedding
         }
-        # Using upsert to handle existing document_id
+        # Using upsert to handle existing document_id (UUID)
         supabase.table("documents").upsert(data).execute()
-        print(f"  [Storage] Document upserted: {document_id}")
-        return True
+        
+        # Explicitly fetch the doc_id (integer) associated with this UUID
+        res = supabase.table("documents").select("doc_id").eq("id", document_id).execute()
+        if res.data:
+            doc_id = res.data[0].get("doc_id")
+            print(f"  [Storage] Document upserted. UUID: {document_id} | Integer ID: {doc_id}")
+            return doc_id
+        return None
     except Exception as e:
         print(f"  [Storage Failure] Could not upsert document: {e}")
-        return False
+        return None
 
 def delete_document_records(supabase, document_id):
     """

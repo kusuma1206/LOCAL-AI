@@ -106,11 +106,20 @@ def run_ingestion_pipeline(file_path):
     # Increase context to 8000 chars to capture more of the document for the global summary
     global_doc_summary = section_summarizer.generate_section_summary(cleaned_text[:8000])
     
+    # 4.8 Document Embedding (Level 1 Vector)
+    model = embedder.get_model()
+    print("Generating Document-level Embedding...")
+    document_embedding = model.encode([global_doc_summary])[0].tolist()
+    
     # Clean up old records for this document and ensure document entry exists
     storage.delete_document_records(storage.supabase, document_id)
-    storage.upsert_document(storage.supabase, document_id, file_path, global_doc_summary)
+    doc_id = storage.upsert_document(storage.supabase, document_id, file_path, global_doc_summary, document_embedding)
     
-    print(f"Engaging Hierarchical Ingestion Flow...")
+    if doc_id is None:
+        print(" [!] Critical Error: Document ID (Integer) could not be retrieved. Aborting ingestion.")
+        return
+        
+    print(f"Engaging Hierarchical Ingestion Flow with doc_id: {doc_id}...")
     
     model = embedder.get_model()
     
@@ -135,7 +144,7 @@ def run_ingestion_pipeline(file_path):
             # 6. Section Storage
             section_id = storage.insert_section(
                 storage.supabase, 
-                document_id, 
+                doc_id, 
                 section_title, 
                 summary, 
                 summary_embedding
@@ -215,16 +224,18 @@ def run_retrieval_flow(query, mode):
     
     if results == "Not Found" or not results:
         print("  [!] No relevant results found for your query.")
-    elif mode == "explain":
-        print(f"\n--- SLM EXPLANATION ---")
-        # Removing risky sys.stdout = io.TextIOWrapper redefinition
-        # Instead, we just print normally. Modern Python 3 handles this better.
-        try:
-            print(results)
-        except UnicodeEncodeError:
-            # Fallback for older/misconfigured Windows terminals
-            print(results.encode('ascii', 'replace').decode('ascii'))
-        print(f"----------------------")
+    elif isinstance(results, dict):
+        print(f"\n--- RETRIEVED CONTEXT (NOLLM) ---")
+        for item in results.get("retrieved_context", []):
+            if item["type"] == "global_summary":
+                print(f"[Document Summary]\n{item['content']}\n")
+            elif item["type"] == "section":
+                print(f"[Section: {item['title']}]\n{item['content']}\n")
+            elif item["type"] == "chunk":
+                print(f"[Chunk]\n{item['content']}\n")
+        print(f"-------------------------------")
+    else:
+        print(f"\nResults: {results}")
     
     print(f"{'='*50}\n")
     return results
@@ -234,7 +245,7 @@ def run_interactive_loop(mode):
     Starts an interactive chat loop for follow-up questions.
     """
     print(f"\n{'='*50}")
-    print(f"Entering Interactive Chat Mode (Mode: {mode})")
+    print(f"Entering Interactive Retrieval Mode (Mode: {mode})")
     print(f"Type 'exit' or 'quit' to end the session.")
     print(f"{'='*50}")
 
@@ -250,25 +261,20 @@ def run_interactive_loop(mode):
             if not query:
                 continue
 
-            # Run retrieval flow with history
             results = mode_router.handle_query(storage.supabase, query, mode, chat_history)
             
-            # Print results (handling display logic similar to run_retrieval_flow)
-            if mode == "explain":
-                print(f"\n--- Assistant ---")
-                try:
-                    print(results)
-                except UnicodeEncodeError:
-                    print(results.encode('ascii', 'replace').decode('ascii'))
-                print(f"-----------------")
+            if isinstance(results, dict):
+                print(f"\n--- Retrieved Context ---")
+                for item in results.get("retrieved_context", []):
+                    if item["type"] == "chunk":
+                        print(f"  [Chunk Content]: {item['content'][:300]}...")
+                print(f"-------------------------")
             else:
                 print(f"\nAssistant: {results}")
 
-            # Update history
             chat_history.append({"role": "user", "content": query})
-            chat_history.append({"role": "assistant", "content": str(results)})
+            chat_history.append({"role": "assistant", "content": "Context retrieved."})
 
-            # Limit history size to 2 exchanges (4 messages) to prevent context bloat
             if len(chat_history) > 4:
                 chat_history = chat_history[-4:]
 

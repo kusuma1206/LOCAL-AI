@@ -72,7 +72,7 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
             mode = "overview_mode"
         
         # 3. Heavy Module Imports
-        from . import query_embedder, section_retriever, chunk_retriever
+        from . import query_embedder, document_retriever, section_retriever, chunk_retriever
         
         # 4. Embed Query (Stage 2)
         t_start_embed = time.time()
@@ -82,26 +82,37 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
         if not query_embedding:
             return "Not Found"
             
-        # 5. Retrieve Top Sections (Stage 4)
+        # 4.5 Retrieve Top Documents (Stage 3 - NEW)
+        t_start_doc = time.time()
+        top_docs = document_retriever.retrieve_top_documents(supabase, query_embedding, top_k=3)
+        latencies["document_retrieval"] = time.time() - t_start_doc
+        
+        if not top_docs:
+            return "Information not found in the documents."
+            
+        doc_ids = [d["doc_id"] for d in top_docs]
+        primary_doc_id = top_docs[0].get("doc_id")
+        primary_filename = top_docs[0].get("filename")
+
+        # 5. Retrieve Top Sections (Stage 4) - Filtered by Doc IDs
         t_start_sec = time.time()
-        top_sections = section_retriever.retrieve_top_sections(supabase, query_embedding, top_n=5)
+        top_sections = section_retriever.retrieve_top_sections(supabase, query_embedding, top_n=5, doc_ids=doc_ids)
         latencies["section_retrieval"] = time.time() - t_start_sec
 
         if not top_sections:
-            return "Information not found in the documents."
+            return "Information not found in the specific sections of the detected documents."
             
-        # Domain Relevance Guardrail (Adds to Stage 1)
+        # Domain Relevance Guardrail
         t_gr_domain_start = time.time()
         domain_ok = guardrail_engine.check_domain_relevance(top_sections[0].get("similarity_score", 0))
         latencies["guardrails_check"] += (time.time() - t_gr_domain_start)
 
         if not domain_ok:
-            print(f"  [Mode Router] Query blocked by Domain Relevance Guardrail")
             return "Information not found in the documents."
             
         # Extract IDs for chunk filtering
         section_ids = [s["section_id"] for s in top_sections]
-        section_scores = {s["section_id"]: s["similarity_score"] for s in top_sections}
+        section_scores = {str(s["section_id"]): s["similarity_score"] for s in top_sections}
         
         # 6. Retrieve Top Chunks (Stage 5)
         t_start_chunk = time.time()
@@ -115,79 +126,81 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
         
         latencies["chunk_retrieval"] = time.time() - t_start_chunk
 
-        # 7. Document Retrieval (Stage 3)
-        t_start_doc = time.time()
-        primary_doc_id = top_sections[0].get("document_id")
-        if mode != "id_only" and primary_doc_id:
-            try:
-                supabase.table("documents").select("document_summary").eq("id", primary_doc_id).execute()
-            except: pass
-        latencies["document_retrieval"] = time.time() - t_start_doc
+        # 7. Document Retrieval Details (Stage 3 Metadata)
+        # (Already handled in doc_retriever)
 
         # 8. Mode Routing & Context Preparation
+        # We no longer use SLM. We return the retrieved context/IDs directly.
         if mode == "id_only":
-            results = f"Document ID: {primary_doc_id}" if primary_doc_id else "No relevant document found."
+            results = {
+                "primary_doc_id": primary_doc_id,
+                "section_ids": section_ids,
+                "top_sections": top_sections[:3]
+            }
             
         elif mode in ["overview_mode", "explain"]:
             # Context building (Stage 6)
             t_start_ctx = time.time()
-            from . import slm_generator
             final_context = []
             
             if mode == "overview_mode":
                 all_sections_res = supabase.table("sections").select("section_title", "section_summary").eq("document_id", primary_doc_id).order("id").execute()
                 if all_sections_res.data:
                     for s in all_sections_res.data:
-                        final_context.append(f"Section: {s['section_title']}\nSummary: {s['section_summary']}")
-                gen_query = f"Provide a comprehensive technical overview and summary based on: {query}"
+                        final_context.append({
+                            "type": "section_summary",
+                            "title": s['section_title'],
+                            "content": s['section_summary']
+                        })
             else:
-                global_summary = ""
                 if primary_doc_id:
                     try:
-                        res_doc = supabase.table("documents").select("document_summary").eq("id", primary_doc_id).execute()
+                        res_doc = supabase.table("documents").select("document_summary").eq("doc_id", primary_doc_id).execute()
                         if res_doc.data:
-                            global_summary = f"[Level 1] GLOBAL DOCUMENT OVERVIEW: {res_doc.data[0]['document_summary']}"
+                            final_context.append({
+                                "type": "global_summary",
+                                "content": res_doc.data[0]['document_summary']
+                            })
                     except: pass
                 
-                architecture_context = [f"SECTION: {s.get('section_title', 'unknown')} | SUMMARY: {s.get('section_summary', 'No summary')}" for s in top_sections[:12]]
-                context_chunks = [f"[Level 3] DETAILED CONTENT: {c.get('chunk_text', '')}" for c in top_chunks]
-                
-                if global_summary: final_context.append(global_summary)
-                if architecture_context:
-                    final_context.append("[Level 2] CONTEXTUAL ARCHITECTURE (Relevant Sections):")
-                    final_context.extend(architecture_context)
-                final_context.extend(context_chunks)
-                gen_query = f"Provide an exhaustive technical explanation for: {query}"
+                for s in top_sections[:5]:
+                    final_context.append({
+                        "type": "section",
+                        "title": s.get('section_title', 'unknown'),
+                        "content": s.get('section_summary', 'No summary')
+                    })
+                    
+                for c in top_chunks:
+                    final_context.append({
+                        "type": "chunk",
+                        "content": c.get('chunk_text', '')
+                    })
 
-            pruned_history = chat_history[-4:] if chat_history else None
             latencies["context_preparation"] = time.time() - t_start_ctx
-
-            # 9. LLM Generation (Stage 7 & 8)
-            retrieval_metadata = {
-                "num_documents": len(set([s.get("document_id") for s in top_sections if s.get("document_id")])),
-                "num_sections": len(top_sections),
-                "num_chunks": len(top_chunks),
-                "chunk_scores": [c.get("similarity_score", 0) for c in top_chunks]
+            
+            # 9. Return Structured Results
+            results = {
+                "intent": intent,
+                "mode": mode,
+                "primary_doc_id": primary_doc_id,
+                "primary_filename": primary_filename,
+                "retrieved_context": final_context,
+                "metadata": {
+                    "num_sections": len(top_sections),
+                    "num_chunks": len(top_chunks),
+                    "latencies": latencies
+                }
             }
-            explanation, gen_timings = slm_generator.generate_explanation(gen_query, final_context, pruned_history, retrieval_metadata)
-            latencies["llm_generation"] = gen_timings["llm_generation"]
-            latencies["output_validation"] = gen_timings["output_validation"]
-            results = explanation
 
     finally:
-        # Consolidated Latency Report
-        print(f"\n--- PERFORMANCE LATENCY REPORT ---")
-        print(f"Guardrails time: {latencies['guardrails_check']:.2f}s")
-        print(f"Embedding time: {latencies['embedding']:.2f}s")
-        print(f"Document retrieval time: {latencies['document_retrieval']:.2f}s")
-        print(f"Section retrieval time: {latencies['section_retrieval']:.2f}s")
-        print(f"Chunk retrieval time: {latencies['chunk_retrieval']:.2f}s")
-        print(f"Context building time: {latencies['context_preparation']:.2f}s")
-        print(f"LLM generation time: {latencies['llm_generation']:.2f}s")
-        print(f"Output validation time: {latencies['output_validation']:.2f}s")
-        print(f"{'-'*35}")
-        print(f"Total pipeline latency: {sum(latencies.values()):.0f} seconds")
-        print(f"{'='*31}\n")
+        # Consolidated Latency Report (Condensed for NOLLM mode)
+        if mode != "id_only":
+            print(f"\n--- PERFORMANCE LATENCY REPORT ---")
+            print(f"Embedding time: {latencies['embedding']:.2f}s")
+            print(f"Section retrieval time: {latencies['section_retrieval']:.2f}s")
+            print(f"Chunk retrieval time: {latencies['chunk_retrieval']:.2f}s")
+            print(f"Total pipeline latency: {sum(latencies.values()):.2f} seconds")
+            print(f"{'-'*35}\n")
 
     # 10. Audit Logging
     try:
@@ -195,7 +208,7 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
         audit_scores = {"sections": section_scores, "chunks": chunk_scores}
         storage.insert_query_log(
             supabase, query, mode, section_ids, chunk_ids, audit_scores, 
-            int(latencies["llm_generation"] * 1000), str(results)[:2000]
+            0, str(results)[:2000]
         )
     except: pass
 
