@@ -21,9 +21,27 @@ def _split_para_by_sentences(para, chunk_size, title):
         chunks.append(" ".join(current_parts))
     return chunks
 
-def chunk_text(sections, chunk_size=500, overlap=50):
+def _chunk_paragraphs(content, title):
+    """Splits section content by paragraphs to create semantic chunks."""
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', content) if p.strip()]
+    chunks = []
+    
+    for para in paragraphs:
+        # Avoid extremely tiny isolated paragraphs unless they are rich
+        if len(para.split()) < 5:
+            # We can prefix with title if it's too short to float alone
+            chunks.append(f"[{title}] {para}")
+        else:
+            chunks.append(para)
+            
+    return chunks
+
+def chunk_text(sections, chunk_size=1500, overlap=0):
     """
-    Enforces Structural Integrity: atomic headings, safe boundaries, and anchoring.
+    Semantic Structure-Aware Chunking: 
+    - Treats each structural section heading as its own precise chunk.
+    - Treats each paragraph within the section as its own natural chunk.
+    - Discards arbitrary token/character sizing.
     """
     if not sections:
         return []
@@ -34,51 +52,23 @@ def chunk_text(sections, chunk_size=500, overlap=50):
         title = section["section_title"]
         content = section["content"]
         
+        # 1. Yield the section title as a true heading chunk
+        all_chunks.append({
+            "chunk_text": title,
+            "section_title": title,
+            "metadata": {"length": len(title), "is_explicit_heading": True}
+        })
+        
         if not content: continue
             
-        # RULE 1: Heading Anchoring - Every chunk starts with its context
-        # RULE 2: Split only at Paragraph Boundaries (\n\n)
-        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', content) if p.strip()]
+        # 2. Yield each paragraph as a structural chunk
+        paragraphs = _chunk_paragraphs(content, title)
         
-        current_chunk_parts = [f"[{title}]"]
-        current_chunk_len = len(current_chunk_parts[0])
-        
-        for i, para in enumerate(paragraphs):
-            # Check if adding para exceeds size
-            if current_chunk_len + len(para) > chunk_size:
-                # If we have content, save it
-                if len(current_chunk_parts) > 1:
-                    combined = "\n\n".join(current_chunk_parts)
-                    all_chunks.append({
-                        "chunk_text": combined,
-                        "section_title": title,
-                        "metadata": {"length": len(combined)}
-                    })
-                    # Start new chunk with heading anchoring
-                    current_chunk_parts = [f"[{title}]", para]
-                    current_chunk_len = len(current_chunk_parts[0]) + len(para) + 2
-                else:
-                    # Paragraph itself is too big - split by sentence
-                    splitted_sub_chunks = _split_para_by_sentences(para, chunk_size, title)
-                    for sub in splitted_sub_chunks:
-                        all_chunks.append({
-                            "chunk_text": sub,
-                            "section_title": title,
-                            "metadata": {"length": len(sub)}
-                        })
-                    current_chunk_parts = [f"[{title}]"]
-                    current_chunk_len = len(current_chunk_parts[0])
-            else:
-                current_chunk_parts.append(para)
-                current_chunk_len += len(para) + 2 # +2 for \n\n
-
-        # Final part of section
-        if len(current_chunk_parts) > 1:
-            combined = "\n\n".join(current_chunk_parts)
+        for para in paragraphs:
             all_chunks.append({
-                "chunk_text": combined,
+                "chunk_text": para,
                 "section_title": title,
-                "metadata": {"length": len(combined)}
+                "metadata": {"length": len(para), "is_explicit_heading": False}
             })
 
     return all_chunks

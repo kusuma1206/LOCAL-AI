@@ -6,7 +6,7 @@ import hashlib
 from config import settings
 from processing import validator, extractor, cleaner, chunker, embedder, storage, structure_analyzer, metadata_builder, section_summarizer
 
-def run_ingestion_pipeline(file_path):
+def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoint_file_id=None, uploaded_by=None):
     print(f"\n{'='*50}")
     print(f"Starting Hierarchical Ingestion Pipeline for: {file_path}")
     print(f"{'='*50}")
@@ -113,7 +113,17 @@ def run_ingestion_pipeline(file_path):
     
     # Clean up old records for this document and ensure document entry exists
     storage.delete_document_records(storage.supabase, document_id)
-    doc_id = storage.upsert_document(storage.supabase, document_id, file_path, global_doc_summary, document_embedding)
+    doc_id = storage.upsert_document(
+        storage.supabase, 
+        document_id, 
+        file_path, 
+        global_doc_summary, 
+        document_embedding,
+        title=title,
+        sharepoint_url=sharepoint_url,
+        sharepoint_file_id=sharepoint_file_id,
+        uploaded_by=uploaded_by
+    )
     
     if doc_id is None:
         print(" [!] Critical Error: Document ID (Integer) could not be retrieved. Aborting ingestion.")
@@ -161,16 +171,23 @@ def run_ingestion_pipeline(file_path):
                 "file_type": Path(file_path).suffix[1:].upper(),
                 "extraction_confidence": confidence,
                 "noise_reduction_percent": reduction,
-                "document_id": document_id,
+                "document_id": doc_id,
                 "section_id": section_id
             }
             enriched_chunks = metadata_builder.build_metadata(chunks, pipeline_context)
             final_processed_chunks = embedder.generate_embeddings(enriched_chunks)
             
-            # 9. Chunk Storage (with foreign key)
+            # 9. Chunk Storage (with foreign key and semantic metadata)
             for chunk_data in final_processed_chunks:
                 content = chunk_data.get("chunk_text", "")
                 embedding = chunk_data.get("embedding")
+                is_heading = chunk_data.get("is_heading", False)
+                chunk_index = chunk_data.get("chunk_index", 0)
+                doc_id_meta = chunk_data.get("document_id")
+                doc_name_meta = chunk_data.get("document_name")
+                sec_title_meta = chunk_data.get("section_title")
+                parent_sec_meta = chunk_data.get("parent_section")
+                
                 chunk_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
                 
                 storage.insert_chunk_with_section(
@@ -178,7 +195,13 @@ def run_ingestion_pipeline(file_path):
                     section_id,
                     content,
                     embedding,
-                    chunk_hash
+                    chunk_hash,
+                    chunk_index=chunk_index,
+                    is_heading=is_heading,
+                    document_id=doc_id_meta,
+                    document_name=doc_name_meta,
+                    section_title=sec_title_meta,
+                    parent_section=parent_sec_meta
                 )
             
             print(f"  Chunks stored under section: {section_id}")

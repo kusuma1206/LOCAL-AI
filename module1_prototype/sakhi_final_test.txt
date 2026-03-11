@@ -1,0 +1,83 @@
+==================== MULTIPLE RESULTS ====================
+
+## Top Results
+
+1️⃣ Section: Overview
+📄 Document: system_design.md
+📍 Page: 1
+🔎 Similarity: 0.8200
+
+main.py is the core FastAPI application that orchestrates the entire Sakhi chatbot system. It handles user registration, onboarding, and most importan...
+
+---
+
+2️⃣ Section: 1. High-Level Architecture
+📄 Document: system_design.md
+📍 Page: 1
+🔎 Similarity: 0.8800
+
+The system is designed as a Python-based backend service that interacts with Supabase for data persistence and vector search, and OpenAI for intellige...
+
+---
+
+3️⃣ Section: Key Components
+📄 Document: system_design.md
+📍 Page: 2
+🔎 Similarity: 0.9600
+
+#### 💬 `POST /sakhi/chat` ⭐ **MAIN ENDPOINT** • Handles all chat interactions • Implements **3-stage onboarding flow** • Routes to appropriate AI mode...
+
+---
+
+4️⃣ Section: 4. Key Data Flows
+📄 Document: system_design.md
+📍 Page: 4
+🔎 Similarity: 0.9400
+
+### 4.2 RAG (Retrieval-Augmented Generation) Response 1. Query: User asks a medical question. 2. Embedding: rag_search.py generates an embedding. 3. S...
+
+
+
+==================== SINGLE DETAILED VIEW ====================
+
+# Key Components
+
+💡 Key Insight
+
+POST /sakhi/chat` ⭐ **MAIN ENDPOINT**
+
+📄 Document: system_design.md
+📍 Page: 2
+📚 Section: Key Components
+
+---
+
+## Content
+
+#### 💬 `POST /**sakhi**/**chat**` ⭐ **MAIN ENDPOINT**
+• Handles all **chat** **interactions**
+• Implements **3-stage onboarding flow**
+• Routes to appropriate AI model based on complexity
+• **Returns:** Reply, mode, language, YouTube links, infographics
+
+### 1. **Endpoints** (The API Surface)
+• Health check endpoint
+• Returns: `{"message": "**Sakhi** API working!"}`
+
+---
+
+## Relevant Match
+
+➡ "POST /**sakhi**/**chat**` ⭐ **MAIN ENDPOINT**"
+
+---
+
+🔎 Similarity Score: 0.9600
+
+---
+
+📂 Source
+
+Document: system_design.md
+Section: Key Components
+Page: 2

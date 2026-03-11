@@ -1,0 +1,22 @@
+﻿--- Running Sakhi Verification Query: 'How does the Sakhi chat interaction POST /sakhi/chat work?' ---
+  [Query Embedder] Query embedded successfully
+  [Document Retriever] Found 3 relevant documents.
+  [Section Retriever] Sections retrieved via RPC (Found 5)
+Query audit record stored
+Match Found: Key Components (Score: 0.5889)
+
+--- Formatted Intelligent Response ---
+# Key Components
+
+≡ƒÆí Key Insight
+
+
+---
+
+≡ƒôé Sources
+
+Document: Sakhi Backend
+Sections used:
+ΓÇó Key Components
+
+--------------------------------------

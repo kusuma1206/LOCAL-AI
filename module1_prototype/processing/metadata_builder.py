@@ -22,32 +22,53 @@ def build_metadata(chunks, pipeline_context):
         content = chunk.get("chunk_text", "")
         section_title = chunk.get("section_title", "unknown")
         
-        # Calculate semantic attributes
-        word_count = len(content.split())
-        char_count = len(content)
+        # In the new chunker, it explicitly flags headings
+        chunk_meta = chunk.get("metadata", {})
+        is_heading_explicit = chunk_meta.get("is_explicit_heading")
+        
+        is_heading = False
+        content_clean = content.replace(f"[{section_title}]", "").strip()
+        
+        if is_heading_explicit is not None:
+            is_heading = is_heading_explicit
+        else:
+            # Fallback for old chunker format
+            if not content_clean or content_clean == section_title:
+                is_heading = True
+            elif len(content_clean.split()) < 20 and content_clean == content_clean.upper():
+                is_heading = True
+            
+        word_count = len(content_clean.split())
+        char_count = len(content_clean)
+        
+        # New semantic metadata fields
+        document_name = file_name
+        parent_section = "unknown" # Parent section parsing could be added later
         
         metadata = {
-            # 1. Source Metadata
             "document_id": document_id,
-            "file_name": file_name,
+            "document_name": document_name,
             "file_type": file_type,
-            
-            # 2. Structural Metadata
             "section_title": section_title,
+            "parent_section": parent_section,
             "chunk_position": i,
+            "chunk_index": i,
+            "is_heading": is_heading,
             "chunk_length": char_count,
-            
-            # 3. Quality Signals
             "extraction_confidence": pipeline_context.get("extraction_confidence", 0.0),
             "noise_reduction_percent": pipeline_context.get("noise_reduction_percent", 0.0),
-            
-            # 4. Semantic Attributes
             "word_count": word_count,
             "character_count": char_count
         }
         
         enriched_chunks.append({
             "chunk_text": content,
+            "is_heading": is_heading,
+            "chunk_index": i,
+            "section_title": section_title, # Pass these down for main.py storage
+            "document_id": document_id,
+            "document_name": document_name,
+            "parent_section": parent_section,
             "metadata": metadata
         })
         

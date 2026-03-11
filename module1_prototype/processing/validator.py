@@ -153,8 +153,10 @@ def validate_document(file_path):
         detected_mime = mime.from_file(file_path)
         
         if detected_mime not in ALLOWED_MIME_TYPES:
-            if path.suffix.lower() == '.md' and detected_mime == 'text/plain':
+            if path.suffix.lower() == '.md' and ('text/' in detected_mime or detected_mime == 'inode/x-empty'):
                 pass # Allow
+            elif path.suffix.lower() == '.docx' and detected_mime == 'application/zip':
+                pass # Allow because docx are zip files
             else:
                 result.update({
                     "status": "INVALID", 

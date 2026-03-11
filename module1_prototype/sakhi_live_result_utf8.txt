@@ -1,0 +1,66 @@
+﻿--- Running Live Query: 'How does the Sakhi chat interaction POST /sakhi/chat work?' ---
+  [Query Embedder] Query embedded successfully
+  [Document Retriever] Found 3 relevant documents.
+  [Section Retriever] Sections retrieved via RPC (Found 5)
+Query audit record stored
+
+[Retrieved Sections]
+- Key Components (Score: 0.5889)
+- Overview (Score: 0.5777)
+- Sakhi Whatsapp Backend - System Design Document (Score: 0.5389)
+
+Keys in section object: ['section_id', 'document_id', 'section_title', 'similarity_score']
+
+[Formatted Response Output]
+========================================
+python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python "e:\Local ai\m
+odule1_prototype\verify
+_sakhi_live.py" > 
+sakhi_l ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Traceback (mo   
+ st recent call las    
+t)::String) [], Re    
+moteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+  File "e:\Local ai\mod
+ule1_prototype\verify_s
+akhi_live.py", line 
+46, in <module>
+    test_live_sakhi()
+    ~~~~~~~~~~~~~~~^^
+  File "e:\Local ai\mod
+ule1_prototype\verify_s
+akhi_live.py", line 
+42, in test_live_sakhi
+    print(formatted)
+    ~~~~~^^^^^^^^^^^
+  File "C:\Users\Kusuma
+\AppData\Local\Programs
+\Python\Python313\Lib\e
+ncodings\cp1252.py", 
+line 19, in encode
+    return codecs.charm
+ap_encode(input,self.er
+rors,encoding_table)[0]
+           ~~~~~~~~~~~~
+~~~~~~~~~^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 
+'charmap' codec can't 
+encode character 
+'\U0001f4a1' in 
+position 20: character 
+maps to <undefined>

@@ -72,7 +72,7 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
             mode = "overview_mode"
         
         # 3. Heavy Module Imports
-        from . import query_embedder, document_retriever, section_retriever, chunk_retriever
+        from . import query_embedder, document_retriever, section_retriever, chunk_retriever, response_formatter
         
         # 4. Embed Query (Stage 2)
         t_start_embed = time.time()
@@ -178,6 +178,43 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
 
             latencies["context_preparation"] = time.time() - t_start_ctx
             
+            # --- NEW: Generate High-Quality Formatted Answer ---
+            formatted_answer = ""
+            try:
+                # Prepare sections for formatter
+                sections_for_format = []
+                
+                # Pass all retrieved and expanded top sections
+                for c in top_chunks:
+                    # Fetch section title for cleaner labeling
+                    sec_title = "Technical Details"
+                    try:
+                        res_s = supabase.table("sections").select("section_title").eq("id", c["section_id"]).execute()
+                        if res_s.data: sec_title = res_s.data[0]["section_title"]
+                    except: pass
+
+                    sections_for_format.append({
+                        "section_name": sec_title,
+                        "document_name": primary_filename or "Unknown",
+                        "document_id": primary_doc_id or "Unknown",
+                        "similarity_score": c["similarity_score"],
+                        "content_text": c.get("content", "")
+                    })
+                
+                # Use the unified conversational formatter
+                if sections_for_format:
+                    formatted_answer = response_formatter.format_conversational_response(query, sections_for_format)
+                else:
+                    print("  [Mode Router] No sections available to pass to formatting.")
+                    formatted_answer = "No sections to format."
+                
+                print(f"  [Mode Router] Conversational answer generated (Length: {len(formatted_answer)})")
+            except Exception as e:
+                import traceback
+                print(f"  [Mode Router] Formatting failed. Full Traceback:")
+                print(traceback.format_exc())
+                formatted_answer = f"Error formatting response: {e}"
+
             # 9. Return Structured Results
             results = {
                 "intent": intent,
@@ -185,6 +222,7 @@ def handle_query(supabase, query: str, mode: str = "id_only", chat_history: list
                 "primary_doc_id": primary_doc_id,
                 "primary_filename": primary_filename,
                 "retrieved_context": final_context,
+                "formatted_answer": formatted_answer,
                 "metadata": {
                     "num_sections": len(top_sections),
                     "num_chunks": len(top_chunks),

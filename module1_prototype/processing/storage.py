@@ -2,12 +2,19 @@ import numpy as np
 import os
 import hashlib
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load secret environment variables
+load_dotenv()
 
 INDEX_FILE = "vector_store/index.faiss"
 
-# Supabase Config
-SUPABASE_URL = "https://vcaxpwrkhfbymgcyhvmk.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjYXhwd3JraGZieW1nY3lodm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNzc1NTgsImV4cCI6MjA4NzY1MzU1OH0.f4LQHfzIoyNOoBTkLDuEljeLNcTY56XTX_6PE4Svygg"
+# Supabase Config from environment
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("  [Critical Warning] SUPABASE_URL or SUPABASE_KEY not found in environment!")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -127,26 +134,33 @@ def insert_section(supabase, doc_id, section_title, section_summary, section_emb
         print(f"  [Hierarchical Storage Failure] Could not insert section: {e}")
         raise
 
-def insert_chunk_with_section(supabase, section_id, content, embedding, chunk_hash):
+def insert_chunk_with_section(supabase, section_id, content, embedding, chunk_hash, chunk_index=None, is_heading=False, document_id=None, document_name=None, section_title=None, parent_section=None):
     """
-    Inserts a chunk into document_chunks with a foreign key to its section.
+    Inserts a chunk into document_chunks with a foreign key to its section and full semantic metadata.
     """
     try:
         data = {
             "section_id": section_id,
             "content": content,
             "embedding": embedding,
-            "chunk_hash": chunk_hash
+            "chunk_hash": chunk_hash,
+            "chunk_index": chunk_index,
+            "is_heading": is_heading,
+            "document_id": document_id,
+            "document_name": document_name,
+            "section_title": section_title,
+            "parent_section": parent_section
         }
         supabase.table("document_chunks").insert(data).execute()
-        print(f"  [Hierarchical Storage] Chunk inserted under section_id: {section_id}")
+        # print(f"  [Hierarchical Storage] Chunk inserted under section_id: {section_id}")
         return True
         
     except Exception as e:
         print(f"  [Hierarchical Storage Failure] Could not insert chunk under section: {e}")
         return False
 
-def upsert_document(supabase, document_id, file_path, document_summary=None, document_embedding=None):
+def upsert_document(supabase, document_id, file_path, document_summary=None, document_embedding=None, 
+                    title=None, sharepoint_url=None, sharepoint_file_id=None, uploaded_by=None):
     """
     Ensures a document record exists and returns its integer doc_id.
     """
@@ -157,6 +171,9 @@ def upsert_document(supabase, document_id, file_path, document_summary=None, doc
             "document_summary": document_summary,
             "document_embedding": document_embedding
         }
+        # Optional: only add if present and column exists (but for now let's just keep it simple as requested)
+        if title: data["title"] = title
+        
         # Using upsert to handle existing document_id (UUID)
         supabase.table("documents").upsert(data).execute()
         

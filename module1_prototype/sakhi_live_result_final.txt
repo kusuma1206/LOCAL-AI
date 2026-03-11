@@ -1,0 +1,44 @@
+--- Running Live Query: 'How does the Sakhi chat interaction POST /sakhi/chat work?' ---
+
+[Retrieved Sections]
+- Key Components (Score: 0.5889)
+- Overview (Score: 0.5777)
+- Sakhi Whatsapp Backend - System Design Document (Score: 0.5389)
+
+[Formatted Response Output]
+========================================
+# Key Components
+
+💡 Key Insight
+
+Endpoints** (The API Surface) - Health check endpoint - Returns: `{"message": "Sakhi API working!"}` #### 👤 `POST /user/register` - Full user registration with name, email, password, phone - Creates user profile in database - **Returns:** `user_id` and user details #### 💬 `POST /sakhi/chat`
+
+📄 Document: Sakhi Backend
+📍 Page: 1
+📚 Section: Key Components
+
+---
+
+## Content
+
+### 1. **Endpoints** (**The** API Surface) - Health check endpoint - Returns: `{"message": "****Sakhi**** API working!"}` #### 👤 `**POST** /user/register` - Full user registration with name, email, password, phone - Creates user profile in database - **Returns:** `user_id` and user details #### 💬 `**POST** /****sakhi****/**chat**`
+
+---
+
+## Relevant Match
+
+➡ "Endpoints** (**The** API Surface) - Health check endpoint - Returns: `{"message": "****Sakhi**** API working!"}` #### 👤 `**POST** /user/register` - Full user registration with name, email, password, phone - Creates user profile in database - **Returns:** `user_id` and user details #### 💬 `**POST** /****sakhi****/**chat**`"
+
+---
+
+🔎 Similarity Score: 0.5889
+
+---
+
+📂 Source
+
+Document: Sakhi Backend
+Section: Key Components
+Page: 1
+
+========================================

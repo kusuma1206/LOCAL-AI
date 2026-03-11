@@ -1,0 +1,26 @@
+﻿--- Running Sakhi Verification Query: 'How does the Sakhi chat interaction POST /sakhi/chat work?' ---
+  [Query Embedder] Query embedded successfully
+  [Document Retriever] Found 3 relevant documents.
+  [Section Retriever] Sections retrieved via RPC (Found 5)
+Query audit record stored
+Match Found: Key Components (Score: 0.5889)
+
+--- Formatted Intelligent Response ---
+# Key Components
+
+≡ƒÆí Key Insight
+Endpoints (The API Surface) - Health check endpoint - Returns: `{"message": "Sakhi API working!
+
+## Key API Endpoints
+
+ΓÇó Endpoints (The API Surface) - Health check endpoint - Returns: `{"message": "**Sakhi** API working!"}` #### ≡ƒæñ `**POST** /user/register` - Full user registration with name, email, password, phone - Creates user profile in database - Returns: `user_id` and user details #### ≡ƒÆ¼ `**POST** /**sakhi**/**chat**`
+
+---
+
+≡ƒôé Sources
+
+Document: Sakhi Backend
+Sections used:
+ΓÇó Key Components
+
+--------------------------------------

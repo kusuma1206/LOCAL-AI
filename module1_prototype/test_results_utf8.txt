@@ -1,0 +1,103 @@
+--- EXAMPLE 1 ---
+User Query: Explain the Sakhi WhatsApp backend overview.
+
+Retrieved context items (before formatting):
+
+Final Formatted Answer:
+Sakhi Whatsapp Backend - System Design Document
+
+Key Insight
+Sakhi Whatsapp Backend - System Design Document]
+
+Overview
+[Sakhi Whatsapp Backend - System Design Document]
+
+Details
+This document outlines the high-level architecture, database schema, and data flows for the Sakhi Whatsapp Backend.
+
+[Overview]
+
+[`main.py`](file:///d:/Ottobon/Sakhi-Whatsapp-Backend/main.py) is the core FastAPI application that orchestrates the entire Sakhi chatbot system. It handles user registration, onboarding, and most importantly, the intelligent chat routing between different AI models based on query complexity.
+
+[1. High-Level Architecture]
+
+The system is designed as a Python-based backend service that interacts with Supabase for data persistence and vector search, and OpenAI for intelligence (LLM and Embeddings). It serves as the brain for a WhatsApp chatbot.
+
+Lists
+• High-Level Architecture
+
+Source
+
+Document: system_design.md
+Document ID: 10
+
+
+==================================================
+
+--- EXAMPLE 2 ---
+User Query: What is the Similarity Gate in Zero Trust AI architecture?
+
+Retrieved context items (before formatting):
+- Type: global_summary
+  Content snippet: # Sakhi Zero-Trust AI Architecture This document outlines the implementation of the Zero-Trust security layers for the Sakhi medical assistant. The go...
+- Type: section
+  Content snippet: No summary...
+- Type: section
+  Content snippet: No summary...
+- Type: section
+  Content snippet: No summary...
+- Type: section
+  Content snippet: No summary...
+- Type: section
+  Content snippet: No summary...
+- Type: chunk
+  Content snippet: ...
+- Type: chunk
+  Content snippet: ...
+- Type: chunk
+  Content snippet: ...
+- Type: chunk
+  Content snippet: ...
+- Type: chunk
+  Content snippet: ...
+
+Final Formatted Answer:
+Sakhi Zero-Trust AI Architecture
+
+Key Insight
+Sakhi Zero-Trust AI Architecture]
+
+Overview
+[Sakhi Zero-Trust AI Architecture]
+
+Details
+This document outlines the implementation of the Zero-Trust security layers for the Sakhi medical assistant. The goal is to eliminate LLM hallucinations and ensure that all medical advice is strictly derived from verified doctor-approved knowledge bases.
+
+[🛡️ The 4-Layer Defense System]
+
+The architecture is built on the principle of "Verify Everything, Trust Nothing."
+
+Layer 1: The Similarity Gate (Deterministic Entrance) File: `main.py` (Lines 457-470) Before any user query is allowed to reach the Language Model (LLM), it must pass a semantic similarity test.
+
+Layer 2: The "Straightjacket" Prompt (Strict Extraction) File: `modules/sakhi_prompt.py` The LLM's system instructions have been refactored to limit its generative capabilities.
+
+Layer 3: Real-Time Token Auditor (The Firewall) File: `modules/auditor.py` & `main.py` This is the "Speed Demon" of the pipeline, providing real-time protection against hallucinations.
+
+Lists
+• Algorithm: Aho-Corasick Deterministic String Matching.
+• Constraint: Explicitly forbidden from using internal training data for facts.
+• Fallback: Forced to use specific fallback phrases if the context is insufficient.
+• Logic: If the RAG (Retrieval-Augmented Generation) engine cannot find a piece of knowledge in our database with at least 65% relevance to the query, the process is blocked.
+• Persona: Defined as an Information Extractor, not a general AI.
+• Process:
+• Result: Prevents the AI from answering out-of-scope or unverified medical questions.
+• Threshold: 0.65 (Cosine Similarity)
+
+Source
+
+Document: Zero_Trust_AI_Architecture.md
+Document ID: 7
+
+
+==================================================
+
