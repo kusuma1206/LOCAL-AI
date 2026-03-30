@@ -1,7 +1,96 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Sparkles, MessageSquare, Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import './App.css'
+
+/**
+ * Sanitizes and normalizes LLM-generated Markdown for consistent rendering.
+ * Protects code blocks from accidental transformation.
+ */
+function sanitizeLLMMarkdown(text) {
+  if (!text) return text;
+
+  // 1. Protect fenced code blocks by splitting the text
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  
+  const cleanedParts = parts.map(part => {
+    if (part.startsWith('```')) return part; // Do not touch code blocks
+
+    let cleaned = part;
+    
+    // 2. Convert Unicode bullets to standard Markdown dashes
+    cleaned = cleaned.replace(/•/g, '-');
+    
+    // 3. Merge headings/labels split by colons and newlines
+    cleaned = cleaned.replace(/:\n+/g, ': ');
+    
+    // 4. Merge broken bullet lines
+    cleaned = cleaned.replace(/([*\-•+]\s*.*):\n+\s*/g, '$1: ');
+
+    // 5. Ensure numbered items always start on a new line (Fix Problem 1)
+    cleaned = cleaned.replace(/([^\n])\s(\d+\.\s)/g, "$1\n\n$2");
+    
+    // 6. Normalize whitespace: maximum 2 consecutive newlines
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    // 7. Ensure proper spacing before headers
+    cleaned = cleaned.replace(/([^\n])\n(#{1,6}\s+)/g, '$1\n\n$2');
+
+    return cleaned;
+  });
+
+  return cleanedParts.join('').trim();
+}
+
+/**
+ * Enforces sequential numbering for section headings.
+ */
+function normalizeSectionHeadings(text) {
+  if (!text) return text;
+
+  // Protect code blocks
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  
+  const cleanedParts = parts.map(part => {
+    if (part.startsWith('```')) return part;
+
+    const lines = part.split("\n");
+    let counter = 1;
+
+    const updated = lines.map(line => {
+      const trimmed = line.trim();
+
+      // Detect standalone heading-like lines (Problem 2)
+      if (
+        trimmed.length > 3 &&
+        trimmed.length < 70 &&
+        !trimmed.includes(".") &&
+        !trimmed.includes(":") &&
+        !/^\d+\./.test(trimmed) &&
+        !trimmed.startsWith('#') &&
+        !trimmed.startsWith('-') &&
+        !trimmed.startsWith('*')
+      ) {
+        return `${counter++}. ${trimmed}`;
+      }
+
+      // Re-number existing numbered sections sequentially
+      if (/^\d+\.\s/.test(trimmed)) {
+        const title = trimmed.replace(/^\d+\.\s*/, "");
+        return `${counter++}. ${title}`;
+      }
+
+      return line;
+    });
+
+    return updated.join("\n");
+  });
+
+  return cleanedParts.join('');
+}
 
 function App() {
   const [messages, setMessages] = useState([])
@@ -17,7 +106,12 @@ function App() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStatus, setUploadStatus] = useState('idle') // 'idle', 'uploading', 'success', 'error'
   const [errorMessage, setErrorMessage] = useState('')
+  const [onedriveUrl, setOnedriveUrl] = useState('')
   const fileInputRef = useRef(null)
+
+  // Re-ingestion Modal State
+  const [showReplaceModal, setShowReplaceModal] = useState(false)
+  const [existingDocInfo, setExistingDocInfo] = useState(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -93,13 +187,46 @@ function App() {
     }
   }
 
-  const handleFileUpload = () => {
+  const handleFileUpload = async () => {
     if (!file || !docTitle || !uploadedBy) {
       setUploadStatus('error')
       setErrorMessage('Please fill in all fields and select a file.')
       return
     }
 
+    setUploadStatus('idle')
+    setErrorMessage('')
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+    // Step 1: Check if document already exists
+    try {
+      const checkResponse = await fetch(`${API_URL}/documents/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: file.name })
+      })
+      const checkData = await checkResponse.json()
+
+      if (checkData.exists) {
+        setExistingDocInfo(checkData)
+        setShowReplaceModal(true)
+        return // Wait for user confirmation
+      }
+    } catch (error) {
+      console.error('Existence check failed:', error)
+      // Proceed anyway or handle error? Let's proceed as it might be a new file
+    }
+
+    performIngestion(false)
+  }
+
+  const confirmReplace = () => {
+    setShowReplaceModal(false)
+    performIngestion(true)
+  }
+
+  const performIngestion = (shouldReplace) => {
     setUploadStatus('uploading')
     setUploadProgress(0)
 
@@ -108,6 +235,7 @@ function App() {
     formData.append('document_title', docTitle)
     formData.append('uploaded_by', uploadedBy)
     formData.append('timestamp', new Date().toISOString())
+    formData.append('replace', shouldReplace)
 
     const xhr = new XMLHttpRequest()
 
@@ -121,6 +249,12 @@ function App() {
     xhr.onload = () => {
       if (xhr.status === 200 || xhr.status === 201) {
         setUploadStatus('success')
+        try {
+          const data = JSON.parse(xhr.responseText)
+          if (data.onedrive_url) setOnedriveUrl(data.onedrive_url)
+        } catch (e) {
+          console.error("Could parse response", e)
+        }
         setFile(null)
         setDocTitle('')
         setUploadedBy('')
@@ -141,7 +275,7 @@ function App() {
     }
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    xhr.open('POST', `${API_URL}/upload-document`)
+    xhr.open('POST', `${API_URL}/ingest-document`)
     xhr.send(formData)
   }
 
@@ -189,7 +323,30 @@ function App() {
                     <span>{msg.role === 'user' ? 'You' : 'SLM Assistant'}</span>
                   </div>
                   <div className="markdown-content">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({node, inline, className, children, ...props}) {
+                          const match = /language-(\w+)/.exec(className || '')
+                          return !inline && match ? (
+                            <SyntaxHighlighter
+                              style={vscDarkPlus}
+                              language={match[1]}
+                              PreTag="div"
+                              {...props}
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          ) : (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          )
+                        }
+                      }}
+                    >
+                      {normalizeSectionHeadings(sanitizeLLMMarkdown(msg.content))}
+                    </ReactMarkdown>
                   </div>
                 </div>
               ))}
@@ -267,7 +424,11 @@ function App() {
                     ref={fileInputRef}
                     style={{ display: 'none' }}
                     accept=".pdf,.docx,.md"
-                    onChange={(e) => setFile(e.target.files[0])}
+                    onChange={(e) => {
+                      setFile(e.target.files[0]);
+                      setUploadStatus('idle');
+                      setOnedriveUrl('');
+                    }}
                   />
                 </div>
               </div>
@@ -286,9 +447,21 @@ function App() {
 
               {uploadStatus === 'success' && (
                 <div className="status-message success">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    <CheckCircle size={18} />
-                    <span>Document uploaded and sent for indexing.</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle size={18} />
+                      <span>Document uploaded and sent for indexing.</span>
+                    </div>
+                    {onedriveUrl && (
+                      <a 
+                        href={onedriveUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: '#10b981', fontSize: '0.85rem', textDecoration: 'underline' }}
+                      >
+                        View on OneDrive
+                      </a>
+                    )}
                   </div>
                 </div>
               )}
@@ -315,6 +488,35 @@ function App() {
           </div>
         )}
       </main>
+
+      {showReplaceModal && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-pop-in">
+            <div className="modal-header">
+              <AlertCircle size={24} color="#f59e0b" />
+              <h3>Duplicate Document Detected</h3>
+            </div>
+            <div className="modal-body">
+              <p>
+                A document named <strong>{file?.name}</strong> already exists in the knowledge base 
+                (ID: {existingDocInfo?.document_id}).
+              </p>
+              <p>Do you want to replace the existing document and all its indexed data?</p>
+            </div>
+            <div className="modal-actions">
+              <button className="cancel-btn" onClick={() => {
+                setShowReplaceModal(false)
+                setUploadStatus('idle')
+              }}>
+                Cancel
+              </button>
+              <button className="replace-btn" onClick={confirmReplace}>
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
