@@ -1,4 +1,4 @@
-def retrieve_top_chunks(supabase, query_embedding: list, section_ids: list, top_k: int = 8, threshold: float = 0.50) -> list:
+def retrieve_top_chunks(supabase, query_embedding: list, section_ids: list, top_k: int = 8, threshold: float = 0.50, query: str = None) -> list:
     """
     Strict Hierarchical Retrieval:
     Instead of doing an independent vector search on chunks, this fetches 
@@ -6,6 +6,24 @@ def retrieve_top_chunks(supabase, query_embedding: list, section_ids: list, top_
     """
     if not section_ids:
         return []
+
+    if query:
+        print("\n[Chunk Search Debug]")
+        print(f"Query: \"{query}\"")
+        print(f"Embedding length: {len(query_embedding)}")
+        
+        # Run the actual chunk vector search for verification
+        from processing import storage
+        all_vector_chunks = storage.search_chunks(supabase, query_embedding, top_k=5)
+        print(f"Top Chunks Found: {len(all_vector_chunks)}")
+        
+        for i, c in enumerate(all_vector_chunks):
+            print(f"\nChunk {i+1}")
+            print(f"Section ID: {c.get('section_id')}")
+            print(f"Similarity: {c.get('similarity_score', 0):.2f}")
+            print(f"Content Preview:")
+            print(f"\"{c.get('content', '')[:120]}...\"")
+        print("-" * 20)
 
     try:
         expanded_chunks = []

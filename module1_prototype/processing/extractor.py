@@ -95,3 +95,25 @@ def _extract_from_docx(file_path):
 def _extract_from_md(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
+
+def extract_document_text(filepath):
+    """
+    Extracts text from PDF, DOCX, or Markdown files and returns a list of normalized lines.
+    """
+    path = Path(filepath)
+    extension = path.suffix.lower()
+    
+    raw_text = ""
+    if extension == '.pdf':
+        raw_text = _extract_from_pdf(filepath)
+    elif extension == '.docx':
+        raw_text = _extract_from_docx(filepath)
+    elif extension in ['.md', '.txt']:
+        raw_text = _extract_from_md(filepath)
+    else:
+        raise ValueError(f"Unsupported file format: {extension}")
+        
+    normalized_text = _normalize_text(raw_text)
+    
+    lines = [line.strip() for line in normalized_text.split('\n') if line.strip()]
+    return lines

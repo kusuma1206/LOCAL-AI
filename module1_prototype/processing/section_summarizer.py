@@ -1,18 +1,35 @@
 import re
 
-def generate_section_summary(section_text: str) -> str:
+def generate_section_summary(text: str) -> str:
     """
-    Generate a lightweight rule-based summary with a quality gate.
+    Generate an intelligent summary. For large texts (Global Summaries), 
+    uses a 'Drip-Fed' strategy (Beginning + Middle + End) to capture the full scope.
     """
-    if not section_text:
-        return ""
+    if not text or len(text) < 100:
+        return text or "Structural node"
 
     # Normalize whitespace
-    clean_text = re.sub(r'\s+', ' ', section_text).strip()
+    clean_text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Strategy: If text is long (> 3000 chars), take samples from Begin, Middle, and End
+    if len(clean_text) > 3000:
+        print(f"  [Summarizer] Large text detected ({len(clean_text)} chars). Applying Drip-Fed strategy...")
+        # Take first 1000, middle 800, and last 800
+        start_fragment = clean_text[:1000]
+        mid_point = len(clean_text) // 2
+        mid_fragment = clean_text[mid_point-400 : mid_point+400]
+        end_fragment = clean_text[-1000:]
+        
+        # Combine fragments for the summarization window
+        representative_text = f"{start_fragment} ... {mid_fragment} ... {end_fragment}"
+    else:
+        representative_text = clean_text
 
-    # Strategy: First 2–3 sentences
-    sentences = re.split(r'(?<=[.!?]) +', clean_text)
-    candidate_summary = " ".join(sentences[:3])[:300]
+    # Extract sentences from the representative text
+    sentences = re.split(r'(?<=[.!?]) +', representative_text)
+    
+    # Take first 3-4 sentences of the representative content
+    candidate_summary = " ".join(sentences[:4])[:400]
 
     # --- Quality Gate ---
     alpha_chars = sum(1 for c in candidate_summary if c.isalpha())
@@ -25,9 +42,9 @@ def generate_section_summary(section_text: str) -> str:
     )
 
     if is_valid:
-        print("  [Section Summarizer] Section summary accepted")
+        print("  [Summarizer] Summary accepted")
         return candidate_summary
     else:
-        print("  [Section Summarizer] Section summary rejected — fallback applied")
-        # Fallback to first 250 characters of original text
-        return clean_text[:250]
+        print("  [Summarizer] Summary rejected — fallback applied")
+        # Fallback to first 250 characters of representative text
+        return representative_text[:250]

@@ -88,11 +88,28 @@ class SLMGenerator:
         prompt = f"""
 [SYSTEM DATA]
 Role: Expert Technical Mentor. 
-Constraint: 
-1. Provide EXTREME detail ONLY using knowledge from the PROVIDED CONTEXT below.
-2. If the user's question cannot be answered strictly using the provided context, or if it is unrelated (e.g., jokes, general trivia), you MUST say: "Information not found in the documents."
-3. Do NOT state general facts or information not present in the documents.
-4. Never summarize. No intros/outros.
+
+STRICT FORMATTING SCHEMA (V4.1):
+1. Use Markdown headings (## or ###) for all sections. NEVER number a heading.
+2. Every label (File, Persona, Threshold, Algorithm, Process, Logging, Output, Constraint, Latency, etc.) MUST use the exact format: **Label:** description.
+3. The explanation MUST be on the SAME LINE as the label. Never split across lines.
+4. Always wrap file paths in inline code format: **File:** `modules/auditor.py`.
+5. Technical blocks (Process, Algorithm, Logging, Configuration, Output) MUST use bullet points (*).
+6. Numbered lists (1., 2.) are FORBIDDEN unless explaining a chronological step-by-step procedure.
+
+[NEGATIVE EXAMPLES - DO NOT DO THIS]
+- Do NOT split lines: 
+  **Persona:**
+  Defined as an Information Extractor (WRONG)
+- Do NOT number processes:
+  **Process**
+  1. Step one (WRONG)
+- Do NOT bullet headers:
+  * **Algorithm:** (WRONG if it's a section header)
+
+[OUTPUT VALIDATION]
+Verify: No numbered headings, all labels follow **Label:** format on a single line, file names have backticks, and process steps use bullets. Rewrite if any rule is violated.
+
 Context:
 {concatenated_chunks}
 {history_str}
@@ -102,7 +119,7 @@ Context:
 
 [EXPERT RESPONSE]
 <result>
-### Executive Summary
+## Executive Summary
 """
 
         import time
@@ -182,12 +199,12 @@ Context:
         # Extraction logic for completion-style anchor
         if "<result>" in decoded_output:
             response = decoded_output.split("<result>")[-1].split("</result>")[0].strip()
-            if not response.startswith("###"):
-                response = "### Executive Summary\n" + response
+            if not response.startswith("##"):
+                response = "## Executive Summary\n" + response
         else:
             response = decoded_output.replace(prompt, "").strip()
-            if not response.startswith("###"):
-                response = "### Executive Summary\n" + response
+            if not response.startswith("##"):
+                response = "## Executive Summary\n" + response
         
         # Hard cut markers
         stop_markers = [

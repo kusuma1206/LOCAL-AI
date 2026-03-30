@@ -1,9 +1,14 @@
 import os
+from dotenv import load_dotenv
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
+
+# Load environment variables
+load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from main import run_retrieval_flow, run_ingestion_pipeline
+from main import run_ingestion_pipeline
 from processing.storage import supabase
 
 print("--- API Server Initializing ---")
@@ -54,6 +59,42 @@ def chat_system(request: QueryHistoryRequest):
     from retrieval import mode_router
     result = mode_router.handle_query(supabase, request.query, request.mode, request.history)
     return {"result": result}
+
+class DocumentCheckRequest(BaseModel):
+    file_name: str
+    file_hash: Optional[str] = None
+
+@app.post("/documents/check")
+async def check_document_existence(request: DocumentCheckRequest):
+    """
+    Checks if a document already exists by filename or hash.
+    Used by frontend for confirmation before upload.
+    """
+    try:
+        # Check by filename first
+        res = supabase.table("documents").select("doc_id, file_hash").eq("filename", request.file_name).execute()
+        
+        if res.data:
+            return {
+                "exists": True, 
+                "document_id": res.data[0]["doc_id"],
+                "file_hash_match": res.data[0]["file_hash"] == request.file_hash if request.file_hash else False
+            }
+        
+        # Optionally check by hash if provided
+        if request.file_hash:
+            res_hash = supabase.table("documents").select("doc_id, filename").eq("file_hash", request.file_hash).execute()
+            if res_hash.data:
+                return {
+                    "exists": True, 
+                    "document_id": res_hash.data[0]["doc_id"],
+                    "filename": res_hash.data[0]["filename"],
+                    "file_hash_match": True
+                }
+                
+        return {"exists": False}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload-document")
 async def upload_document_full(
@@ -120,6 +161,94 @@ async def upload_document_legacy(file: UploadFile = File(...)):
     """
     # ... existing implementation or redirect to full
     return await upload_document_full(file)
+
+@app.post("/ingest-document")
+async def ingest_document_refined(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    document_title: Optional[str] = Form(None),
+    uploaded_by: Optional[str] = Form(None),
+    replace: Optional[bool] = Form(False)
+):
+    """
+    Refined ingestion workflow with re-ingestion (replace) support.
+    """
+    # 2. Validate extension
+    allowed_exts = ['.pdf', '.docx', '.md']
+    filename = file.filename
+    ext = os.path.splitext(filename)[1].lower()
+    
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Unsupported file format: {ext}")
+
+    # 1. Read file bytes to validate size, compute hash, and for upload
+    file_bytes = await file.read()
+    file_size_mb = len(file_bytes) / (1024 * 1024)
+    
+    # 2. Validate size
+    if file_size_mb > 10:
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
+    # Compute hash for content-based duplicate detection
+    import hashlib
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    try:
+        from processing.storage import create_document, update_document_status, delete_document_complete, log_ingestion_event
+        
+        # Step 5: Safe Deletion Logic if replace=true
+        old_doc_id = None
+        if replace:
+            # Check for existing document by filename
+            existing = supabase.table("documents").select("doc_id").eq("filename", filename).execute()
+            if existing.data:
+                old_doc_id = existing.data[0]["doc_id"]
+                print(f"  [Replace] Deleting existing document ID: {old_doc_id}")
+                delete_document_complete(old_doc_id)
+                log_ingestion_event("document_replaced", filename, old_doc_id=old_doc_id)
+
+        # 4 & 5. Insert into documents table & Get new doc_id
+        title = document_title or os.path.splitext(filename)[0].replace('_', ' ')
+        doc_id = create_document(title, filename, file_hash=file_hash)
+        
+        if not doc_id:
+            raise Exception("Failed to initialize document in database")
+
+        # 6. Upload to OneDrive
+        from processing.sharepoint import upload_to_onedrive
+        sp_result = upload_to_onedrive(file_bytes, filename, doc_id)
+        
+        web_url = sp_result.get("webUrl")
+        item_id = sp_result.get("id")
+        
+        # 7 & 8. Save webUrl & Update status='processing'
+        update_document_status(doc_id, "processing", storage_url=web_url)
+
+        # 9. Trigger ingestion pipeline in the background
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+            
+        background_tasks.add_task(
+            run_ingestion_pipeline,
+            file_path, 
+            title=title,
+            sharepoint_url=web_url,
+            doc_id_override=doc_id,
+            onedrive_item_id=item_id,
+            uploaded_by=uploaded_by
+        )
+
+        return {
+            "status": "success",
+            "document_id": doc_id,
+            "onedrive_url": web_url,
+            "replaced": replace,
+            "old_document_id": old_doc_id
+        }
+
+    except Exception as e:
+        print(f"Ingestion workflow failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/documents")
 async def list_documents():

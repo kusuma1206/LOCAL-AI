@@ -8,7 +8,13 @@ load_dotenv()
 conn = psycopg2.connect(os.getenv("DATABASE_URL"))
 cur = conn.cursor()
 
-with open("apply_semantic_metadata.sql", "r", encoding="utf-8") as f:
+import sys
+
+# Get filename from command line or default
+filename = sys.argv[1] if len(sys.argv) > 1 else "apply_semantic_metadata.sql"
+
+print(f"Reading migration file: {filename}")
+with open(filename, "r", encoding="utf-8") as f:
     sql = f.read()
 
 try:

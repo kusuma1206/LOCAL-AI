@@ -13,7 +13,7 @@ def get_model():
         _model = SentenceTransformer(MODEL_NAME)
     return _model
 
-def embed_query(query: str) -> list:
+def generate_query_embedding(query: str) -> list:
     """
     Generates a 384-dimensional normalized embedding for a given query string.
     """

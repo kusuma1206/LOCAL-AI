@@ -1,5 +1,110 @@
 import re
 
+def detect_heading(line):
+    """
+    Detects Markdown style headings.
+    Returns (level, title) if heading, else None.
+    """
+    if not line:
+        return None
+    
+    match = re.match(r'^(#{1,6})\s+(.+)', line.strip())
+    if match:
+        level = len(match.group(1))
+        title = match.group(2).strip()
+        return (level, title)
+    
+    return None
+
+import uuid
+
+def build_section_tree(lines, document_id):
+    """
+    Builds a hierarchical section tree from a list of document lines.
+    Returns a list of section dictionaries ready for DB insertion.
+    """
+    sections = []
+    
+    # Initialize the stack with a root "Document" pseudo-node
+    root_id = str(uuid.uuid4())
+    # The stack holds dicts with 'level' and 'id'
+    # level 0 represents the document root
+    stack = [{'level': 0, 'id': root_id}]
+    
+    current_section = None
+    order_counter = 1
+    
+    # We maintain a buffer of text that belongs to the "current" section
+    text_buffer = []
+
+    def save_current_section():
+        nonlocal current_section, text_buffer
+        if current_section and text_buffer:
+            current_section['content'] = "\n".join(text_buffer).strip()
+            text_buffer = []
+
+    for line in lines:
+        heading_info = detect_heading(line)
+        
+        if heading_info:
+            level, title = heading_info
+            
+            # Save the text gathered so far into the previous section
+            save_current_section()
+            
+            # Pop from stack until we find a parent with a strictly smaller level
+            while stack and stack[-1]['level'] >= level:
+                stack.pop()
+                
+            # The new parent is whatever is currently at the top of the stack
+            parent_id = stack[-1]['id'] if stack else None
+            
+            section_id = str(uuid.uuid4())
+            
+            # Create the new section node
+            current_section = {
+                'section_id': section_id,
+                'document_id': document_id,
+                'title': title,
+                'parent_section_id': parent_id if parent_id != root_id else None,
+                'level': level,
+                'section_order': order_counter,
+                'content': ""
+            }
+            sections.append(current_section)
+            
+            # Push this new section onto the stack
+            stack.append({'level': level, 'id': section_id})
+            order_counter += 1
+            
+        else:
+            # It's not a heading; if we have a current section, accumulate its content
+            if current_section:
+                text_buffer.append(line)
+            # If no current section exists yet (e.g. text before first heading),
+            # we could create a default "Overview" section or just ignore.
+            # We'll create a default one for safety.
+            elif line.strip():
+                section_id = str(uuid.uuid4())
+                current_section = {
+                    'section_id': section_id,
+                    'document_id': document_id,
+                    'title': "Overview",
+                    'parent_section_id': None,
+                    'level': 1,
+                    'section_order': order_counter,
+                    'content': ""
+                }
+                sections.append(current_section)
+                stack.append({'level': 1, 'id': section_id})
+                text_buffer.append(line)
+                order_counter += 1
+
+    # Don't forget to save the last section's accumulated text
+    save_current_section()
+    
+    return sections
+
 def _get_alpha_density(line):
     """Calculates the ratio of alphabetic characters to total characters."""
     if not line:

@@ -1,0 +1,35 @@
+# Environment Variables
+.env
+.env.local
+
+# Dependencies
+__pycache__/
+*.pyc
+.venv/
+.env/
+
+# Build outputs
+vector_store/
+uploads/
+onedrive_mock/
+*.log
+
+# Project Specific
+doc_ids.txt
+docker_depth.txt
+output.txt
+response-debug.json
+response-utf8.txt
+response.json
+sakhi_*.txt
+score_analysis.txt
+scores_output.txt
+scores_utf8.txt
+test_chunk_output_utf8.txt
+test_diag*.txt
+test_output*.txt
+test_results*.txt
+upload_test_log.txt
+upload_test_results.txt
+verification_output.txt
+verify_response.json

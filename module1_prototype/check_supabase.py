@@ -12,7 +12,7 @@ def check_data():
         print("--- SECTIONS ---")
         if res.data:
             for row in res.data:
-                print(f"ID: {row['id']} | Title: {row['section_title']} | Summary Preview: {row['section_summary'][:50]}...")
+                print(f"ID: {row['section_id']} | Title: {row['title']} | Summary Preview: {row.get('section_summary', 'None')[:50]}...")
         else:
             print("No sections found.")
             

@@ -1,15 +1,17 @@
-import requests
-import json
+from config import settings
 
-URL = "http://localhost:8000/query"
+URL = f"{settings.API_BASE_URL}/query"
 
 queries = [
-    "Explain the Sakhi WhatsApp backend overview.",
-    "What is the Similarity Gate in Zero Trust AI architecture?"
+    ("Explain the Sakhi WhatsApp backend overview.", "explain"),
+    ("What is the Similarity Gate in Zero Trust AI architecture?", "technical"),
+    ("what is similarity gate in sakhi zero trust ai archietcture", "explain"), # Forced explain to test override
+    ("Who are you?", "technical")
 ]
 
-for i, q in enumerate(queries, 1):
-    payload = {"query": q, "mode": "explain"}
+for i, (q, mode) in enumerate(queries, 1):
+    # The mode is now explicitly defined in the queries list, so the router decision logic is removed here.
+    payload = {"query": q, "mode": mode}
     try:
         response = requests.post(URL, json=payload, timeout=120)
         data = response.json()

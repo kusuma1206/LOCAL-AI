@@ -1,8 +1,15 @@
 from supabase import create_client, Client
+import sys
 import os
+from config import settings
 
-SUPABASE_URL = "https://vcaxpwrkhfbymgcyhvmk.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjYXhwd3JraGZieW1nY3lodm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNzc1NTgsImV4cCI6MjA4NzY1MzU1OH0.f4LQHfzIoyNOoBTkLDuEljeLNcTY56XTX_6PE4Svygg"
+# Supabase Config from settings (loaded from .env)
+SUPABASE_URL = settings.SUPABASE_URL
+SUPABASE_KEY = settings.SUPABASE_KEY
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("  [Critical Error] SUPABASE_URL or SUPABASE_KEY not found in environment!")
+    sys.exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

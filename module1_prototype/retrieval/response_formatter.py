@@ -14,9 +14,9 @@ def clean_markdown_noise(text: str) -> str:
     if not text:
         return ""
 
-    # 1. Strip Mermaid diagrams
-    text = re.sub(r'graph\s+(TD|LR|BT|RL).*?(\n\s*end|$)', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'subgraph\s+.*?\n.*?end', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # [MODIFIED] PRESERVING TECHNICAL ARTIFACTS
+    # We no longer strip Mermaid diagrams or code blocks here as they are essential for technical documents.
+    # The stripping of '#' and other noise still applies to text content, but we need to stay out of the way of blocks.
     
     # 2. Fix common Mojibake / Double-encoding artifacts
     mojibake = {
@@ -34,23 +34,51 @@ def clean_markdown_noise(text: str) -> str:
     }
     for bad, good in mojibake.items():
         text = text.replace(bad, good)
+    
+    # [LOGIC UPDATE] We will skip aggressive stripping of '#' and code blocks if we detect they are part of a technical structure
+    # However, to maintain the current 'Conversational' feel requested earlier, we still want to clean up generic noise.
+    
+    # 3. Strip large markdown header markers only if they aren't inside code blocks
+    # (Simplified approach: only strip if line starts with # and isn't likely code)
+    lines = text.split('\n')
+    cleaned_lines = []
+    in_code_block = False
+    for line in lines:
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            cleaned_lines.append(line)
+            continue
+            
+        if not in_code_block:
+            # [MODIFIED] We no longer strip headings or bold markers 
+            # as the user wants structured documentation (headings/bullets).
+            pass
         
-    # 3. Strip large markdown header markers completely
-    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
-    
-    # 4. Clean inline artifacts
-    text = text.replace('___', '').replace('---', '').replace('***', '').replace('**', '')
-    
-    # 5. Remove lingering code blocks if empty or just noise (keep logic inside if large, but user says drop formatting artifacts)
-    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+        cleaned_lines.append(line)
+    text = '\n'.join(cleaned_lines)
     
     # 6. Repair broken paragraphs
     lines = text.split('\n')
     repaired_lines = []
     current_line = ""
+    in_code_block = False
     
     for line in lines:
         stripped = line.strip()
+        
+        # Track code block state to avoid mangling technical layout
+        if stripped.startswith('```'):
+            if current_line:
+                repaired_lines.append(current_line)
+                current_line = ""
+            in_code_block = not in_code_block
+            repaired_lines.append(line)
+            continue
+            
+        if in_code_block:
+            repaired_lines.append(line) # Preserve exactly as is
+            continue
+
         if not stripped:
             if current_line:
                 repaired_lines.append(current_line)
@@ -64,11 +92,19 @@ def clean_markdown_noise(text: str) -> str:
             repaired_lines.append(stripped)
             current_line = ""
         else:
-            if current_line and not re.search(r'[.!?:]$', current_line):
+            # [MODIFIED] Allow merging lines after a colon (:) to support inline labels.
+            # We only stop merging if the line ends with a sentence-terminator (. ! ?), 
+            # OR if it's a special activity log header.
+            is_activity_header = "ACTIVITY LOG" in current_line or current_line.strip().endswith("WEEK")
+            
+            if current_line and not re.search(r'[.!?]$', current_line) and not is_activity_header:
                 current_line += " " + stripped
             else:
                 if current_line:
                     repaired_lines.append(current_line)
+                    # Force a paragraph break after headers or activity logs
+                    if is_activity_header:
+                        repaired_lines.append("")
                 current_line = stripped
                 
     if current_line:
@@ -162,7 +198,8 @@ def merge_sections(sections: list) -> list:
         key = (doc_name, sec_name)
         
         content = sec.get("content_text", "")
-        content = re.sub(r'^(#+\s*)?\d+(\.\d+)*\s+', '', content, flags=re.MULTILINE)
+        # [MODIFIED] We no longer strip numbering from sections here
+        # as the SLM is now responsible for structured output.
         
         if key not in merged_map:
             merged_map[key] = {
@@ -188,13 +225,8 @@ def merge_sections(sections: list) -> list:
 
 def format_conversational_response(query: str, sections: list) -> str:
     """
-    Strictly follows the template:
-    Title
-    Key Insight
-    Overview
-    Details
-    Lists
-    Source
+    Formats the response by merging chunk text, removing duplicate sentences,
+    preserving headings, and appending source metadata.
     """
     merged = merge_sections(sections)
     if not merged:
@@ -202,72 +234,53 @@ def format_conversational_response(query: str, sections: list) -> str:
 
     best = merged[0]
     title = best.get("section_name", "Technical Explanation")
-    title = re.sub(r'^\d+[\.\d\s]*', '', title)
-    title = re.sub(r'[^\x00-\x7F]+', '', title).strip()
-
-    full_content = "\n\n".join(m.get("content_text", "") for m in merged)
-    insight = extract_relevant_sentence(query, full_content)
+    
+    # We want to preserve the heading text, so we'll start the markdown with it
+    markdown = f"{title}\n\n"
 
     seen_sentences = set()
-    all_paragraphs = []
-    all_bullets = set()
+    final_paragraphs = []
 
-    def deduplicate(text):
-        nonlocal all_bullets
-        clean_text = clean_markdown_noise(text)
-        normal_text, extracted_bullets = reconstruct_lists(clean_text)
+    for m in merged:
+        content = m.get("content_text", "")
+        # Remove noisy markdown but keep sentence structure
+        clean_content = clean_markdown_noise(content)
         
-        for bullet in extracted_bullets:
-            all_bullets.add(bullet.strip())
-            
-        paragraphs = normal_text.split('\n\n')
-        final_paragraphs = []
+        paragraphs = clean_content.split('\n\n')
         
         for p in paragraphs:
             stripped_p = p.strip()
             if not stripped_p: continue
             
+            # Split into sentences to deduplicate
+            # We use a simple regex split on common punctuation
             sentences = re.split(r'(?<=[.!?])\s+', stripped_p)
             unique_sentences = []
+            
             for s in sentences:
                 s_clean = s.strip().lower()
-                fuzzy_key = "".join(filter(str.isalnum, s_clean))[:40]
+                # Create a simple fuzzy key by alphanumeric filtering to catch identical semantic sentences
+                fuzzy_key = "".join(filter(str.isalnum, s_clean))[:50]
+                
                 if fuzzy_key and fuzzy_key not in seen_sentences:
                     unique_sentences.append(s)
                     seen_sentences.add(fuzzy_key)
             
             if unique_sentences:
                 final_paragraphs.append(" ".join(unique_sentences))
-        
-        return final_paragraphs
 
-    for m in merged:
-        all_paragraphs.extend(deduplicate(m.get("content_text", "")))
-        
-    # Filter empty paragraphs
-    all_paragraphs = [p for p in all_paragraphs if p.strip()]
+    # Join the final unique paragraphs with single newlines to maintain continuous flow
+    if final_paragraphs:
+        markdown += "\n\n".join(final_paragraphs)
+        markdown += "\n"
 
-    # Layout formulation
-    markdown = f"{title}\n\n"
-    markdown += f"Key Insight\n{insight}\n\n"
-    
-    if all_paragraphs:
-        markdown += f"Overview\n{all_paragraphs[0]}\n\n"
-        
-    if len(all_paragraphs) > 1:
-        details = "\n\n".join(all_paragraphs[1:])
-        markdown += f"Details\n{details}\n\n"
-        
-    if all_bullets:
-        bullet_text = "\n".join(f"• {b}" for b in sorted(list(all_bullets)))
-        markdown += f"Lists\n{bullet_text}\n\n"
-
-    # Source block
-    doc_name = best.get("document_name", "Unknown")
+    # Source block (V4 Footer Rule: Plain text, no headings/bullets)
+    doc_name = best.get("document_name", "Unknown Document")
     doc_id = best.get("document_id", "Unknown")
 
-    markdown += "Source\n\n"
-    markdown += f"Document: {doc_name}\n"
+    markdown += "\n"
+    markdown += "Created by Antigravity AI – Building Safe & Reliable Medical Intelligence.\n\n"
+    markdown += f"Source: {doc_name}\n"
     markdown += f"Document ID: {doc_id}\n"
 
     return markdown
