@@ -36,6 +36,8 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
 
         if status == "INVALID":
             log_debug(f"Validation Failed: {message}")
+            if doc_id_override:
+                storage.update_document_status(doc_id_override, "invalid_file")
             return
         
         if status == "DUPLICATE_DETECTED" and not doc_id_override:
@@ -53,12 +55,12 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
             if not raw_text:
                 log_debug("Extraction Failed: No text content.")
                 if doc_id_override:
-                    storage.update_document_status(doc_id_override, "error")
+                    storage.update_document_status(doc_id_override, "extraction_failed")
                 return
         except Exception as e:
             log_debug(f"Extraction Failed: {e}")
             if doc_id_override:
-                storage.update_document_status(doc_id_override, "error")
+                storage.update_document_status(doc_id_override, "extraction_failed")
             return
 
         # 4. Cleaning
@@ -66,7 +68,7 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
         cleaned_text = clean_result["cleaned_text"]
         log_debug(f"Noise Reduction: {clean_result['noise_reduction_percent']}%")
 
-        # 4.5 Update status (Do NOT delete record here, as it was just created in api.py)
+        # 4.5 Update status
         if doc_id_override:
             log_debug(f"  [Pipeline] Updating status to processing for ID: {doc_id_override}")
             storage.update_document_status(doc_id_override, "processing")
@@ -74,59 +76,81 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
                 log_debug(f"  [Pipeline] Received sharepoint_url: {sharepoint_url}")
 
         # Step 3 & 4. Hierarchical Structure Analysis
-        if doc_id_override:
-            log_debug(f"  [Pipeline] Updating status to chunking.")
-            storage.update_document_status(doc_id_override, "chunking")
-        
-        cleaned_lines = [line.strip() for line in cleaned_text.split('\n') if line.strip()]
-        log_debug(f"  [Pipeline] Building section tree.")
-        sections = structure_analyzer.build_section_tree(cleaned_lines, doc_id_override or document_id)
-        log_debug(f"  [Pipeline] Detected {len(sections)} sections.")
-        
-        # 4.7 Global Document Summary
-        log_debug(f"  [Pipeline] Generating 'Drip-Fed' summary.")
-        global_doc_summary = section_summarizer.generate_section_summary(cleaned_text)
-        log_debug(f"  [Pipeline] Summary generated.")
-        
-        # Step 5. Embedding
-        if doc_id_override:
-            log_debug(f"  [Pipeline] Updating status to embedding.")
-            storage.update_document_status(doc_id_override, "embedding")
-
-        model = embedder.get_model()
-        log_debug("Generating Document-level Embedding...")
-        document_embedding = model.encode([global_doc_summary])[0].tolist()
-        
-        log_debug(f"Updating document metadata in Supabase...")
-        doc_id = storage.upsert_document(
-            storage.supabase, 
-            doc_id_override or document_id, 
-            file_path, 
-            global_doc_summary, 
-            document_embedding,
-            title=title,
-            sharepoint_url=sharepoint_url,
-            sharepoint_file_id=onedrive_item_id or sharepoint_file_id,
-            uploaded_by=uploaded_by
-        )
-        
-        if doc_id is None:
-            log_debug(" [!] Critical Error: Document ID could not be updated.")
+        try:
+            if doc_id_override:
+                log_debug(f"  [Pipeline] Updating status to chunking.")
+                storage.update_document_status(doc_id_override, "chunking")
+            
+            cleaned_lines = [line.strip() for line in cleaned_text.split('\n') if line.strip()]
+            log_debug(f"  [Pipeline] Building section tree.")
+            sections = structure_analyzer.build_section_tree(cleaned_lines, doc_id_override or document_id)
+            log_debug(f"  [Pipeline] Detected {len(sections)} sections.")
+        except Exception as e:
+            log_debug(f"  [!] Structure Analysis Failed: {e}")
+            if doc_id_override:
+                storage.update_document_status(doc_id_override, "structure_failed")
             return
 
-        log_debug(f"Starting hierarchical section/chunk processing for doc_id: {doc_id}")
+        # 4.7 Global Document Summary
+        try:
+            log_debug(f"  [Pipeline] Generating 'Drip-Fed' summary.")
+            global_doc_summary = section_summarizer.generate_section_summary(cleaned_text)
+            log_debug(f"  [Pipeline] Summary generated.")
+        except Exception as e:
+            log_debug(f"  [!] Summary Generation Failed: {e}")
+            if doc_id_override:
+                storage.update_document_status(doc_id_override, "summary_failed")
+            return
+        
+        # Step 5. Embedding
+        try:
+            if doc_id_override:
+                log_debug(f"  [Pipeline] Updating status to embedding.")
+                storage.update_document_status(doc_id_override, "embedding")
+
+            model = embedder.get_model()
+            log_debug("  [Pipeline] Generating Document-level Embedding...")
+            document_embedding = model.encode([global_doc_summary])[0].tolist()
+        except Exception as e:
+            log_debug(f"  [!] Embedding Generation Failed: {e}")
+            if doc_id_override:
+                storage.update_document_status(doc_id_override, "embedding_failed")
+            return
+        
+        log_debug(f"  [Pipeline] Updating document metadata in Supabase...")
+        try:
+            doc_id = storage.upsert_document(
+                storage.supabase, 
+                doc_id_override or document_id, 
+                file_path, 
+                global_doc_summary, 
+                document_embedding,
+                title=title,
+                sharepoint_url=sharepoint_url,
+                sharepoint_file_id=onedrive_item_id or sharepoint_file_id,
+                uploaded_by=uploaded_by
+            )
+            
+            if doc_id is None:
+                raise Exception("upsert_document returned None")
+        except Exception as e:
+            log_debug(f"  [!] Metadata Storage Failed: {e}")
+            if doc_id_override:
+                storage.update_document_status(doc_id_override, "storage_failed")
+            return
+
+        log_debug(f"  [Pipeline] Starting hierarchical section/chunk processing for doc_id: {doc_id}")
         for section in sections:
             section_title = section["title"]
             section_content = section["content"]
                 
             try:
                 # 5. Section Summarization & Embedding
-                # Fix: Handle empty content for hierarchical integrity
                 summary = section_summarizer.generate_section_summary(section_content or "")
                 embedding_input = f"{section_title} {section_content[:500]}" if section_content else section_title
                 summary_embedding = model.encode([embedding_input])[0].tolist()
                 
-                # 6. Section Storage (Always insert, even if empty)
+                # 6. Section Storage
                 s_id = storage.insert_section(
                     storage.supabase, doc_id, section_title, summary, summary_embedding,
                     section_id=section.get("section_id"),
@@ -135,7 +159,7 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
                     order=section.get("section_order", 1)
                 )
                 
-                # 7. Chunking (Only if content exists)
+                # 7. Chunking
                 if not section_content:
                     continue
 
@@ -150,7 +174,7 @@ def run_ingestion_pipeline(file_path, title=None, sharepoint_url=None, sharepoin
                         storage.supabase, s_id, chunk_data["chunk_text"], embeddings[i], chunk_index=i + 1
                     )
             except Exception as e:
-                log_debug(f"  [!] Atomic Failure for section {section_title}: {e}")
+                log_debug(f"    [!] Atomic Failure for section {section_title}: {e}")
 
         # Final Status Update
         storage.update_document_status(doc_id, "ready")

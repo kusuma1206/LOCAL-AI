@@ -131,7 +131,7 @@ function App() {
     setInput('')
     setIsLoading(true)
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const API_URL = import.meta.env.VITE_API_URL
     try {
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
@@ -197,7 +197,7 @@ function App() {
     setUploadStatus('idle')
     setErrorMessage('')
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const API_URL = import.meta.env.VITE_API_URL
 
     // Step 1: Check if document already exists
     try {
@@ -274,7 +274,7 @@ function App() {
       setErrorMessage('Network error occurred during upload.')
     }
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const API_URL = import.meta.env.VITE_API_URL
     xhr.open('POST', `${API_URL}/ingest-document`)
     xhr.send(formData)
   }

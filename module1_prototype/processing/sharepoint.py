@@ -6,12 +6,12 @@ def get_onedrive_access_token(tenant_id, client_id, client_secret):
     """
     Acquires an access token using direct Microsoft OAuth2 client credentials flow.
     """
-    url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    url = f"{settings.MS_LOGIN_BASE_URL}/{tenant_id}/oauth2/v2.0/token"
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
         "client_id": client_id,
         "client_secret": client_secret,
-        "scope": "https://graph.microsoft.com/.default",
+        "scope": f"{settings.MS_GRAPH_BASE_URL.replace('/v1.0', '')}/.default",
         "grant_type": "client_credentials"
     }
     
@@ -48,7 +48,7 @@ def upload_to_onedrive(file_bytes, filename, doc_id):
     clean_filename = f"doc_{doc_id}_{filename}"
     
     # User-specific endpoint: /users/{user_id}/drive/root:/{folder}/{filename}:/content
-    url = f"https://graph.microsoft.com/v1.0/users/{user_id}/drive/root:/{folder}/{clean_filename}:/content"
+    url = f"{settings.MS_GRAPH_BASE_URL}/users/{user_id}/drive/root:/{folder}/{clean_filename}:/content"
     
     headers = {
         "Authorization": f"Bearer {token}",
@@ -63,7 +63,7 @@ def upload_to_onedrive(file_bytes, filename, doc_id):
         
         # Step 4: Create a shareable link (Anonymous View)
         # POST /users/{user_id}/drive/items/{item_id}/createLink
-        share_url = f"https://graph.microsoft.com/v1.0/users/{user_id}/drive/items/{item_id}/createLink"
+        share_url = f"{settings.MS_GRAPH_BASE_URL}/users/{user_id}/drive/items/{item_id}/createLink"
         share_headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
@@ -118,13 +118,13 @@ def download_from_onedrive(onedrive_item_id_or_url):
     
     # If it looks like an ID (no slashes/dots), use item-id endpoint
     if "/" not in onedrive_item_id_or_url and "." not in onedrive_item_id_or_url:
-        url = f"https://graph.microsoft.com/v1.0/users/{user_id}/drive/items/{onedrive_item_id_or_url}/content"
+        url = f"{settings.MS_GRAPH_BASE_URL}/users/{user_id}/drive/items/{onedrive_item_id_or_url}/content"
     else:
         # Fallback: Parse item ID from the URL or use a different Graph API
         # For this prototype, we'll try to find the item by name in the known folder if it's a name
         # However, the most robust way in a Service Principal context is using the Item ID.
         # Let's assume the input is the Item ID for now as per the upload return.
-        url = f"https://graph.microsoft.com/v1.0/users/{user_id}/drive/items/{onedrive_item_id_or_url}/content"
+        url = f"{settings.MS_GRAPH_BASE_URL}/users/{user_id}/drive/items/{onedrive_item_id_or_url}/content"
 
     response = requests.get(url, headers=headers)
     
@@ -145,8 +145,8 @@ class SharePointService:
         self.drive_id = settings.SHAREPOINT_DRIVE_ID
         self.base_folder = settings.SHAREPOINT_BASE_FOLDER
         
-        self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
-        self.scopes = ["https://graph.microsoft.com/.default"]
+        self.authority = f"{settings.MS_LOGIN_BASE_URL}/{self.tenant_id}"
+        self.scopes = [f"{settings.MS_GRAPH_BASE_URL.replace('/v1.0', '')}/.default"]
         
     def get_access_token(self):
         """
@@ -172,8 +172,8 @@ class SharePointService:
         }
         
         # URL format for drive item upload
-        # https://graph.microsoft.com/v1.0/sites/{site-id}/drives/{drive-id}/root:/{folder}/{filename}:/content
-        upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives/{self.drive_id}/root:/{self.base_folder}/{remote_filename}:/content"
+        # {MS_GRAPH_BASE_URL}/sites/{site-id}/drives/{drive-id}/root:/{folder}/{filename}:/content
+        upload_url = f"{settings.MS_GRAPH_BASE_URL}/sites/{self.site_id}/drives/{self.drive_id}/root:/{self.base_folder}/{remote_filename}:/content"
         
         with open(file_path, "rb") as f:
             file_content = f.read()

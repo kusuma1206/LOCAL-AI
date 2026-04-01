@@ -343,14 +343,16 @@ button:active {
 
 /* Markdown Table Styles */
 .markdown-content table {
+  display: block;
   width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 1.5rem 0;
   font-size: 0.9rem;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
-  overflow: hidden;
   border: 1px solid var(--glass-border);
+  -webkit-overflow-scrolling: touch;
 }
 
 .markdown-content th {
